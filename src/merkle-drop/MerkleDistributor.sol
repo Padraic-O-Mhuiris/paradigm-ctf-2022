@@ -4,8 +4,6 @@ pragma solidity 0.8.16;
 
 import "./MerkleProof.sol";
 
-import "forge-std/console2.sol";
-
 interface ERC20Like {
     function transfer(address dst, uint256 qty) external returns (bool);
 }
@@ -44,7 +42,6 @@ contract MerkleDistributor {
         // Verify the merkle proof.
         bytes32 node = keccak256(abi.encodePacked(index, account, amount));
         require(MerkleProof.verify(merkleProof, merkleRoot, node), "MerkleDistributor: Invalid proof.");
-        console2.log("VERIFIED");
         // Mark it claimed and send the token.
         _setClaimed(index);
         require(ERC20Like(token).transfer(account, amount), "MerkleDistributor: Transfer failed.");

