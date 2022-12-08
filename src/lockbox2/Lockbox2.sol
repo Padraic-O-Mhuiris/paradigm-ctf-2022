@@ -3,7 +3,6 @@
 pragma solidity 0.8.15;
 
 contract Lockbox2 {
-
     bool public locked = true;
 
     function solve() external {
@@ -13,7 +12,9 @@ contract Lockbox2 {
         (successes[2],) = address(this).delegatecall(abi.encodePacked(this.stage3.selector, msg.data[4:]));
         (successes[3],) = address(this).delegatecall(abi.encodePacked(this.stage4.selector, msg.data[4:]));
         (successes[4],) = address(this).delegatecall(abi.encodePacked(this.stage5.selector, msg.data[4:]));
-        for (uint256 i = 0; i < 5; ++i) require(successes[i]);
+        for (uint256 i = 0; i < 5; ++i) {
+            require(successes[i]);
+        }
         locked = false;
     }
 
@@ -31,15 +32,19 @@ contract Lockbox2 {
     }
 
     function stage3(uint256 a, uint256 b, uint256 c) external {
-        assembly { mstore(a, b) }
+        assembly {
+            mstore(a, b)
+        }
         (bool success, bytes memory data) = address(uint160(a + b)).staticcall("");
         require(success && data.length == c);
     }
 
     function stage4(bytes memory a, bytes memory b) external {
         address addr;
-        assembly { addr := create(0, add(a, 0x20), mload(a)) }
-        (bool success, ) = addr.staticcall(b);
+        assembly {
+            addr := create(0, add(a, 0x20), mload(a))
+        }
+        (bool success,) = addr.staticcall(b);
         require(tx.origin == address(uint160(uint256(addr.codehash))) && success);
     }
 

@@ -5,23 +5,19 @@ pragma solidity 0.8.16;
 import "./UniswapV2Like.sol";
 
 interface ERC20Like {
-    function transferFrom(address, address, uint) external;
-    function transfer(address, uint) external;
-    function approve(address, uint) external;
-    function balanceOf(address) external view returns (uint);
+    function transferFrom(address, address, uint256) external;
+    function transfer(address, uint256) external;
+    function approve(address, uint256) external;
+    function balanceOf(address) external view returns (uint256);
 }
 
 interface MasterChefLike {
-    function poolInfo(uint256 id) external returns (
-        address lpToken,
-        uint256 allocPoint,
-        uint256 lastRewardBlock,
-        uint256 accSushiPerShare
-    );
+    function poolInfo(uint256 id)
+        external
+        returns (address lpToken, uint256 allocPoint, uint256 lastRewardBlock, uint256 accSushiPerShare);
 }
 
 contract MasterChefHelper {
-
     MasterChefLike public constant masterchef = MasterChefLike(0xc2EdaD668740f1aA35E4D8f227fB8E17dcA888Cd);
     UniswapV2RouterLike public constant router = UniswapV2RouterLike(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
 
@@ -45,13 +41,13 @@ contract MasterChefHelper {
 
     function _addLiquidity(address token0, address token1, uint256 minAmountOut) internal {
         (,, uint256 amountOut) = router.addLiquidity(
-            token0, 
-            token1, 
-            ERC20Like(token0).balanceOf(address(this)), 
-            ERC20Like(token1).balanceOf(address(this)), 
-            0, 
-            0, 
-            msg.sender, 
+            token0,
+            token1,
+            ERC20Like(token0).balanceOf(address(this)),
+            ERC20Like(token1).balanceOf(address(this)),
+            0,
+            0,
+            msg.sender,
             block.timestamp
         );
         require(amountOut >= minAmountOut);
@@ -61,12 +57,6 @@ contract MasterChefHelper {
         address[] memory path = new address[](2);
         path[0] = tokenIn;
         path[1] = tokenOut;
-        router.swapExactTokensForTokens(
-            amountIn,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(amountIn, 0, path, address(this), block.timestamp);
     }
 }
