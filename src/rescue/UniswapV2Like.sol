@@ -3,6 +3,8 @@
 pragma solidity 0.8.16;
 
 interface UniswapV2RouterLike {
+    function factory() external pure returns (address);
+
     function swapExactTokensForTokens(
         uint256 amountIn,
         uint256 amountOutMin,
@@ -21,6 +23,7 @@ interface UniswapV2RouterLike {
         address to,
         uint256 deadline
     ) external returns (uint256 amountA, uint256 amountB, uint256 liquidity);
+    function quote(uint256 amountA, uint256 reserveA, uint256 reserveB) external pure returns (uint256 amountB);
 }
 
 interface UniswapV2PairLike {

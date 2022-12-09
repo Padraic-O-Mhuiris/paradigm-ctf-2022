@@ -15,18 +15,8 @@ contract Setup {
 
     constructor() payable {
         mcHelper = new MasterChefHelper();
-
-        console2.log("SETUP ETH BALANCE", address(this).balance);
-        console2.log("SETUP WETH BALANCE", weth.balanceOf(address(this)));
-        console2.log("MC WETH BALANCE", weth.balanceOf(address(mcHelper)));
         weth.deposit{value: 10 ether}();
-        console2.log("SETUP ETH BALANCE", address(this).balance);
-        console2.log("SETUP WETH BALANCE", weth.balanceOf(address(this)));
-        console2.log("MC WETH BALANCE", weth.balanceOf(address(mcHelper)));
         weth.transfer(address(mcHelper), 10 ether); // whoops
-        console2.log("SETUP ETH BALANCE", address(this).balance);
-        console2.log("SETUP WETH BALANCE", weth.balanceOf(address(this)));
-        console2.log("MC WETH BALANCE", weth.balanceOf(address(mcHelper)));
     }
 
     function isSolved() external view returns (bool) {
