@@ -17,7 +17,6 @@ contract ExploitMerkleDrop is Test {
     }
 
     function test__exploit() public {
-
         console2.log("contract balance:", t.balanceOf(address(md)));
 
         // Index 37 and 19 packing

